@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simple Chat App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+    };
+  </script>
+  <style>
+    html, body {
+      height: 100%;
+    }
+  </style>
+</head>
+<body class="dark:bg-gray-900 bg-gray-100 text-gray-900 dark:text-gray-100 h-full flex items-center justify-center transition-colors">
+
+  <div id="chat-container" class="flex flex-col w-full max-w-screen-md h-[90vh] p-4 md:p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg transition-all overflow-hidden">
+
+    <!-- Header and Buttons -->
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="text-2xl font-semibold text-center flex-1 text-gray-900 dark:text-white">💬 Simple Chat Room</h2>
+      <div class="flex gap-2">
+        <button id="darkModeBtn" class="bg-gray-300 dark:bg-gray-700 text-sm px-3 py-1 rounded hover:bg-gray-400 dark:hover:bg-gray-600">
+          🌗 Toggle Mode
+        </button>
+        <button id="fullscreenBtn" class="bg-gray-300 dark:bg-gray-700 text-sm px-3 py-1 rounded hover:bg-gray-400 dark:hover:bg-gray-600">
+          ⛶ Fullscreen
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat Messages -->
+    <div id="chat-box" class="flex-1 overflow-y-auto border border-gray-300 dark:border-gray-700 p-4 rounded mb-4 bg-gray-50 dark:bg-gray-700 space-y-2 text-sm">
+      <!-- Messages will appear here -->
+    </div>
+
+    <!-- Input -->
+    <div class="flex gap-2 mt-auto">
+      <textarea id="message" rows="2" class="flex-grow border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white p-2 rounded resize-none" placeholder="Type your message... (Shift+Enter for newline)"></textarea>
+      <button onclick="sendMessage()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Send</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50 hidden"></div>
+
+  <script>
+    const username = prompt("Enter your unique username");
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/${username}`);
+    const chatBox = document.getElementById("chat-box");
+    const chatContainer = document.getElementById("chat-container");
+    const body = document.body;
+    const html = document.documentElement;
+
+    ws.onclose = function(event) {
+      if (event.code === 4001) {
+        showToast("❌ Username already taken!", 'red');
+        setTimeout(() => location.reload(), 1500);
+      }
+    };
+
+    ws.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      const msg = document.createElement("div");
+      const isSelf = data.user === username;
+
+      msg.className = `p-2 rounded group relative ${isSelf ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-right' : 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100 text-left'}`;
+
+      const header = document.createElement("div");
+      header.className = "font-semibold mb-1 text-base md:text-base";
+      header.innerHTML = `${escapeHtml(data.user)} <span class="text-xs text-gray-500">[${data.timestamp}]</span>`;
+
+      const body = document.createElement("pre");
+      body.className = "whitespace-pre-wrap break-words text-sm message-content";
+      body.textContent = data.message;
+
+      const copyBtn = document.createElement("button");
+      copyBtn.textContent = "Copy";
+      copyBtn.className = `copy-btn absolute top-1 ${isSelf ? 'left-1' : 'right-1'} hidden group-hover:inline-block bg-gray-300 dark:bg-gray-700 text-xs px-2 py-1 rounded`;
+      copyBtn.onclick = (e) => {
+        e.stopPropagation();
+        copyToClipboard(data.message);
+      };
+
+      msg.appendChild(header);
+      msg.appendChild(body);
+      msg.appendChild(copyBtn);
+
+      chatBox.appendChild(msg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    };
+
+    function sendMessage() {
+      const input = document.getElementById("message");
+      const text = input.value.trim();
+      if (text) {
+        ws.send(text);
+        input.value = "";
+        input.focus();
+      }
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!');
+      });
+    }
+
+    function showToast(message, color = 'green') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-${color}-500 text-white px-4 py-2 rounded shadow-lg z-50`;
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 1500);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    document.getElementById("message").addEventListener("keydown", function(event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Fullscreen Toggle
+    document.getElementById("fullscreenBtn").addEventListener("click", () => {
+      chatContainer.classList.toggle("fixed");
+      chatContainer.classList.toggle("top-0");
+      chatContainer.classList.toggle("left-1/2");
+      chatContainer.classList.toggle("transform");
+      chatContainer.classList.toggle("-translate-x-1/2");
+      chatContainer.classList.toggle("w-full");
+      chatContainer.classList.toggle("h-screen");
+      chatContainer.classList.toggle("rounded-lg");
+      chatContainer.classList.toggle("z-40");
+      chatContainer.classList.toggle("max-w-screen-md");
+    });
+
+    // Dark Mode Toggle
+    document.getElementById("darkModeBtn").addEventListener("click", () => {
+      html.classList.toggle("dark");
+    });
+  </script>
+</body>
+</html>
